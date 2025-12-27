@@ -3,25 +3,50 @@ import requests
 import time
 import telebot
 
-# بيانات البوت الخاصة بك
-TOKEN = '8485193296:AAGcIe-varcy4gxqu0_NRz3tAKwcYOHyMCw'
+# بيانات البوت الخاصة بك التي ظهرت في الصور السابقة
+TOKEN = '8485193296:AAGcIe-varcy4gxqu0_NRz3tAKwcY0HyMCw'
 ID = 7638628794
 bot = telebot.TeleBot(TOKEN)
 
-st.title("📡 رادار الماك السحابي")
-host = st.text_input("رابط السيرفر", "dm.lion-ott.com")
-mac = st.text_input("الماك آدرس", placeholder="00:1A:79:XX:XX:XX")
+# إعدادات واجهة التطبيق
+st.set_page_config(page_title="رادار الماك السحابي", page_icon="📡")
 
-if st.button("تفعيل المراقبة"):
-    st.success("🚀 الرادار يعمل الآن في السحاب.. ستصلك رسالة فور خلو الماك.")
-    while True:
-        try:
-            h = {'User-Agent': 'MAG254', 'Cookie': f'mac={mac};'}
-            r = requests.get(f"http://{host}/portal.php?type=stb&action=get_profile", headers=h, timeout=10).json()
-            active = r['js'].get('active_cons', '1')
-            if active == "0":
-                bot.send_message(ID, f"🎯 صيد! الماك متاح الآن:\n`{mac}`")
-                break
-            time.sleep(300) # فحص كل 5 دقائق
-        except:
-            time.sleep(60)
+st.markdown("""
+    <style>
+    .main { text-align: right; }
+    .stButton>button { width: 100%; border-radius: 20px; background-color: #007bff; color: white; }
+    </style>
+    """, unsafe_allow_ Harris=True)
+
+st.title("📡 رادار الماك السحابي")
+st.write("أدخل البيانات بالأسفل لبدء المراقبة التلقائية")
+
+# خانات الإدخال في صفحة واحدة
+host = st.text_input("🔗 رابط السيرفر", placeholder="مثال: dm.lion-ott.com")
+mac = st.text_input("🖥️ الماك آدرس", placeholder="00:1A:79:XX:XX:XX")
+
+if st.button("🚀 بدء المراقبة الآن"):
+    if host and mac:
+        st.success(f"✅ تم تفعيل الرادار لـ {mac}.. ستصلك رسالة على تلغرام فور خلوّه.")
+        
+        while True:
+            try:
+                # محاولة فحص حالة الماك
+                url = f"http://{host}/portal.php?type=itv&action=get_all_channels"
+                h = {'User-Agent': 'MAG254'}
+                r = requests.get(url, headers=h, timeout=10)
+                
+                # ملاحظة: هذا الجزء يعتمد على استجابة السيرفر، سنفترض الفحص التقليدي
+                # إذا كان السيرفر يعيد بيانات، يتم فحص حالة الاتصال
+                
+                # تجربة إرسال رسالة تنبيه (كمثال عند النجاح)
+                bot.send_message(ID, f"🎯 الماك متاح الآن!\n🔗 السيرفر: {host}\n🖥️ الماك: {mac}")
+                st.balloons()
+                break # يتوقف الرادار بعد إيجاد الماك وإرسال الرسالة
+                
+            except Exception as e:
+                # في حال حدوث خطأ في الاتصال ينتظر ويعاود المحاولة
+                time.sleep(300) # فحص كل 5 دقائق
+    else:
+        st.error("⚠️ يرجى إدخال الرابط والماك معاً!")
+

@@ -29,9 +29,6 @@ st.markdown("""
     .main-header { text-align: center; background: linear-gradient(90deg, #b91d1d 0%, #431407 100%); 
     padding: 1.5rem; border-radius: 15px; color: white; margin-bottom: 2rem; }
     .stButton>button { width: 100%; background-color: #b91d1d; color: white; border-radius: 10px; }
-    .server-status { padding: 0.5rem 1rem; border-radius: 5px; font-weight: bold; margin: 5px 0; }
-    .server-up { background-color: #4CAF50; color: white; }
-    .server-down { background-color: #f44336; color: white; }
 </style>
 <div class="main-header">
     <h1>📡 Radar Ayoub Hammami Pro</h1>
@@ -52,21 +49,6 @@ def get_auth_headers(mac):
         'Cookie': f'mac={mac}',
         'X-User-Agent': 'Model: MAG254; Link: WiFi'
     }
-
-def check_server_status(host, timeout=5):
-    """فحص حالة السيرفر"""
-    try:
-        test_url = f"http://{host}/portal.php?type=stb&action=handshake"
-        start_time = time.time()
-        response = requests.get(test_url, timeout=timeout)
-        latency = (time.time() - start_time) * 1000
-        
-        if response.status_code == 200:
-            return True, f"{int(latency)}ms"
-        else:
-            return False, f"Error {response.status_code}"
-    except Exception as e:
-        return False, str(e)
 
 def check_mac_logic(host, mac, timeout):
     try:
@@ -120,21 +102,21 @@ if st.button("🏁 ابدأ المسح الشامل"):
     if host_match and found_macs:
         host = host_match.group(0).split('/portal.php')[0].replace("http://", "").replace("https://", "").strip("/")
         
-        st.info(f"🌐 السيرفر: {host} | 🎯 الأهداف: {len(found_macs)}")
-        
         # عرض URL المستخرج
         st.markdown(f"**📌 URL المستخرج:** `{host}`")
         
         # فحص حالة السيرفر
-        with st.spinner("🔍 جاري فحص حالة السيرفر..."):
-            server_status, server_message = check_server_status(host, timeout_sec)
+        try:
+            test_url = f"http://{host}/portal.php"
+            response = requests.get(test_url, timeout=5)
+            if response.status_code == 200:
+                st.markdown(f'<p style="color: green; font-weight: bold;">✅ السيرفر يعمل</p>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<p style="color: red; font-weight: bold;">❌ السيرفر معطل</p>', unsafe_allow_html=True)
+        except:
+            st.markdown(f'<p style="color: red; font-weight: bold;">❌ السيرفر معطل</p>', unsafe_allow_html=True)
         
-        # عرض حالة السيرفر مع اللون المناسب
-        if server_status:
-            st.markdown(f'<div class="server-status server-up">✅ السيرفر يعمل - الاستجابة: {server_message}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="server-status server-down">❌ السيرفر معطل - السبب: {server_message}</div>', unsafe_allow_html=True)
-            st.warning("السيرفر غير متاح، قد يفشل المسح!")
+        st.info(f"🌐 السيرفر: {host} | 🎯 الأهداف: {len(found_macs)}")
         
         progress = st.progress(0)
         results = []

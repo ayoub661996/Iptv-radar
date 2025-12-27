@@ -3,90 +3,94 @@ import requests
 import time
 import telebot
 import random
+import re
 
 # بياناتك الثابتة
 TOKEN = "8485193296:AAHpW18fpS74B3oaUGqNCYZjbodRPa76uLE"
 ID = 7638628794
 bot = telebot.TeleBot(TOKEN)
 
-# قائمة القنوات المفضلة
+# القنوات المفضلة
 FAVORITE_CHANNELS = ["bein sport Arabic", "bein africa cup 2025"]
 
-# قائمة بصمات أجهزة MAG ومتصفحات مختلفة للتمويه (التخفي)
-USER_AGENTS = [
-    "Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-    "MAG254/2.18 (Linux; GNU) WebKit/533.3",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Mobile/15E148 Safari/604.1"
-]
+# بصمات التخفي
+AGENTS = ["MAG254/2.18 (Linux; GNU) WebKit/533.3", "Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) Safari/604.1"]
 
-st.set_page_config(page_title="رادار الماك الشبح", page_icon="🕵️")
-st.title("🕵️ رادار الماك السحابي (Stealth Mode)")
+st.set_page_config(page_title="رادار الماك الاحترافي", page_icon="📡")
+st.title("📡 رادار الماك (المتصلين والاستقرار)")
 
-st.subheader("📝 إدخال البيانات الذكي")
-input_data = st.text_area("أدخل الرابط والماك بأي شكل عشوائي (نسخ/لصق)", 
-                         placeholder="مثال:\nhttp://server.com\n00:1A:79:XX:XX:XX")
+input_data = st.text_area("أدخل الرابط والماك (نسخ ولصق عشوائي)")
 
-if st.button("🏁 بدء الفحص المتخفي"):
+if st.button("🚀 بدء الفحص الشامل"):
     if input_data:
-        # استخراج الرابط والماك
-        lines = input_data.split()
-        host = next((l for l in lines if "." in l), None)
-        mac = next((l for l in lines if ":" in l), None)
+        parts = input_data.split()
+        host = next((p for p in parts if "." in p), None)
+        mac = next((p for p in parts if ":" in p), None)
 
         if host and mac:
             clean_host = host.replace("http://", "").replace("https://", "").strip("/")
-            st.success("🕵️ تم تفعيل نظام التخفي.. جاري الفحص بصمت.")
+            st.info("🕵️ نظام التخفي نشط.. جاري تحليل المتصلين وقوة الإشارة.")
             
             try:
-                # اختيار بصمة عشوائية لكل طلب لعدم كشف البوت
-                selected_ua = random.choice(USER_AGENTS)
+                # اختيار بصمة عشوائية وتأخير بسيط للتخفي
+                headers = {'User-Agent': random.choice(AGENTS), 'Cookie': f'mac={mac}'}
+                time.sleep(random.uniform(1, 2))
                 
-                # إعداد الطلب المموه
-                url = f"http://{clean_host}/portal.php?type=itv&action=get_all_channels"
-                headers = {
-                    'User-Agent': selected_ua,
-                    'Cookie': f'mac={mac}',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Referer': f'http://{clean_host}/c/'
-                }
-
+                # 1. فحص المتصلين (Profile)
+                url_prof = f"http://{clean_host}/portal.php?type=stb&action=get_profile&force_stb=1"
                 start_time = time.time()
-                # إضافة تأخير عشوائي بسيط لتبدو كإنسان
-                time.sleep(random.uniform(1.5, 3.0)) 
-                
-                response = requests.get(url, headers=headers, timeout=15)
+                res_prof = requests.get(url_prof, headers=headers, timeout=15)
                 end_time = time.time()
                 
-                # فحص الحالة والقوة
-                status = "🟢 يعمل" if response.status_code == 200 else "🔴 متوقف/محظور"
-                latency = round((end_time - start_time) * 1000, 2)
-                stability = "💎 ثابت" if latency < 600 else "⚠️ تقطيع محتمل"
+                # حساب سرعة الرد (الاستقرار)
+                latency = round((end_time - start_time) * 1000)
                 
-                # فحص القنوات
-                found_channels = []
-                content = response.text.lower()
-                for ch in FAVORITE_CHANNELS:
-                    found_channels.append(f"✅ {ch}" if ch.lower() in content else f"❌ {ch}")
+                # استخراج عدد المتصلين
+                active_cons = "0"
+                if res_prof.status_code == 200:
+                    match = re.search(r'"active_cons"\s*:\s*"(\d+)"', res_prof.text)
+                    active_cons = match.group(1) if match else "0"
 
-                # إرسال التقرير الشامل
+                # 2. تقييم الاستقرار (حسب سرعة الرد)
+                if latency < 800:
+                    stability = "🚀 قوي (ثابت جداً)"
+                elif 800 <= latency < 2000:
+                    stability = "🟡 متوسط (قد يقطع)"
+                else:
+                    stability = "🐌 ضعيف (تقطيع مستمر)"
+
+                # 3. تقييم الحالة النهائية (متصلين + استقرار)
+                if active_cons == "0" and latency < 1000:
+                    final_verdict = "💎 ماك ذهبي (خالٍ وقوي)"
+                elif active_cons != "0":
+                    final_verdict = f"⚠️ مشغول حالياً ({active_cons} متصل)"
+                else:
+                    final_verdict = "⚙️ يحتاج تجربة (استجابة بطيئة)"
+
+                # 4. فحص القنوات
+                url_ch = f"http://{clean_host}/portal.php?type=itv&action=get_all_channels"
+                res_ch = requests.get(url_ch, headers=headers, timeout=15)
+                found = []
+                for ch in FAVORITE_CHANNELS:
+                    found.append(f"✅ {ch}" if ch.lower() in res_ch.text.lower() else f"❌ {ch}")
+
+                # التقرير النهائي المنظم
                 report = (
                     f"🕵️ **تقرير الرادار المتخفي**\n\n"
                     f"🖥️ الماك: `{mac}`\n"
                     f"🌐 السيرفر: {clean_host}\n"
-                    f"⚡ الحالة: {status}\n"
-                    f"⏱️ الاستجابة: {latency}ms\n"
-                    f"🛡️ الاستقرار: {stability}\n"
-                    f"👤 البصمة المستخدمة: `MAG-Stealth`\n\n"
-                    f"📺 **القنوات المفضلة:**\n" + "\n".join(found_channels)
+                    f"👥 المتصلون الآن: `{active_cons}`\n"
+                    f"⏱️ سرعة الرد: `{latency}ms`\n"
+                    f"📊 الاستقرار: {stability}\n"
+                    f"⚖️ النتيجة: **{final_verdict}**\n\n"
+                    f"📺 **القنوات المفضلة:**\n" + "\n".join(found)
                 )
                 
                 bot.send_message(ID, report, parse_mode="Markdown")
-                st.info("✅ انتهى الفحص وأُرسل التقرير لتلغرام.")
+                st.success(f"🎯 تم الفحص بنجاح! الاستقرار: {stability}")
                 
             except Exception as e:
-                st.error(f"❌ فشل الفحص: {e}")
-        else:
-            st.warning("⚠️ يرجى التأكد من وجود الرابط والماك.")
+                st.error(f"❌ خطأ: {e}")
     else:
-        st.error("⚠️ الصندوق فارغ!")
+        st.warning("⚠️ يرجى إدخال البيانات.")
+

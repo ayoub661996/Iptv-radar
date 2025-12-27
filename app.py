@@ -10,87 +10,96 @@ TOKEN = "8485193296:AAHpW18fpS74B3oaUGqNCYZjbodRPa76uLE"
 ID = 7638628794
 bot = telebot.TeleBot(TOKEN)
 
-# قائمة القنوات المفضلة الدقيقة
-FAV_CHANNELS = [
-    "BEIN AFRICA CUP 2025",
-    "IARI BEIN SPORTS 8K",
-    "IARI BEIN SPORTS 4K"
-]
+# قائمة القنوات المفضلة (بحث ذكي)
+CHANNELS_KEYS = {
+    "BEIN AFRICA CUP 2025": ["AFRICA", "2025"],
+    "IARI BEIN SPORTS 8K": ["8K", "IARI"],
+    "IARI BEIN SPORTS 4K": ["4K", "IARI"]
+}
 
 st.set_page_config(page_title="رادار الشبح المتكامل", page_icon="📡")
-st.title("📡 رادار الماك (الفحص الشامل + الحالة)")
+st.title("📡 رادار الماك (الحالة + المتصلين + القنوات)")
 
-input_data = st.text_area("أدخل البيانات (الرابط والماك)")
+input_data = st.text_area("أدخل الرابط والماك (نسخ ولصق عشوائي)")
 
-if st.button("🚀 تشغيل الرادار الشامل"):
+if st.button("🚀 بدء الفحص والمراقبة"):
     if input_data:
-        parts = input_data.split()
-        host = next((p for p in parts if "." in p), None)
-        mac = next((p for p in parts if ":" in p), None)
+        # استخراج الرابط والماك بذكاء
+        parts = input_data.replace(',', ' ').split()
+        host = next((p for p in parts if "." in p and ":" not in p or p.startswith("http")), None)
+        mac = next((p for p in parts if ":" in p and len(p) >= 14), None)
 
         if host and mac:
             clean_host = host.replace("http://", "").replace("https://", "").strip("/")
-            st.info("🕵️ جاري فحص حالة السيرفر والماك...")
+            st.info(f"🔎 جاري فحص السيرفر والماك: {mac}")
             
             def perform_full_check():
                 headers = {'User-Agent': 'MAG254', 'Cookie': f'mac={mac}'}
                 try:
-                    # 1. فحص هل السيرفر يعمل أصلاً (Server Status)
                     base_url = f"http://{clean_host}/portal.php"
                     start_time = time.time()
-                    test_res = requests.get(base_url, headers=headers, timeout=10)
+                    
+                    # 1. فحص هل السيرفر يشتغل أو معطل
+                    try:
+                        test_res = requests.get(base_url, headers=headers, timeout=10)
+                        server_status = "✅ يشتغل (متصل)" if test_res.status_code == 200 else "❌ معطل أو محظور"
+                    except:
+                        server_status = "❌ معطل (لا توجد استجابة)"
+                    
                     latency_ms = (time.time() - start_time) * 1000
-                    
-                    if test_res.status_code != 200:
-                        return "❌ متوقف أو محظور", "غير معروف", "متقطع", [], False
-
-                    server_status = "✅ يعمل (متصل)"
-                    
-                    # 2. فحص المتصلين والاستقرار
-                    url_prof = f"{base_url}?type=stb&action=get_profile&force_stb=1"
-                    r_prof = requests.get(url_prof, headers=headers, timeout=10)
-                    
                     stability = "قوي (لا يقطع) ✅" if latency_ms < 1000 else "متقطع ⚠️"
                     
+                    # 2. فحص المتصلين
+                    url_prof = f"{base_url}?type=stb&action=get_profile&force_stb=1"
+                    r_prof = requests.get(url_prof, headers=headers, timeout=10)
                     active = "0"
                     if r_prof.status_code == 200:
                         match = re.search(r'"active_cons"\s*:\s*"(\d+)"', r_prof.text)
                         active = match.group(1) if match else "0"
                     
-                    # 3. فحص القنوات المفضلة
+                    # 3. فحص القنوات (البحث الذكي)
                     url_ch = f"{base_url}?type=itv&action=get_all_channels"
                     r_ch = requests.get(url_ch, headers=headers, timeout=10)
-                    found = [f"✅ {c}" if c.upper() in r_ch.text.upper() else f"❌ {c}" for c in FAV_CHANNELS]
+                    ch_content = r_ch.text.upper()
                     
-                    return server_status, active, stability, found, True
+                    found_status = []
+                    for name, keys in CHANNELS_KEYS.items():
+                        if all(k.upper() in ch_content for k in keys):
+                            found_status.append(f"✅ {name}")
+                        else:
+                            found_status.append(f"❌ {name}")
+                    
+                    return server_status, active, stability, found_status, True
                 except:
-                    return "❌ متوقف (لا يوجد استجابة)", "غير معروف", "متقطع", [], False
+                    return "❌ معطل", "غير معروف", "متقطع", [], False
 
-            # الفحص الأول
+            # تنفيذ الفحص الأول
             s_status, active, stab, channels, success = perform_full_check()
             
+            # تقرير شامل يذكر كل شيء بوضوح
             report = (
-                f"📡 **تقرير الرادار الشامل**\n\n"
+                f"📡 **تقرير الرادار المتكامل**\n\n"
+                f"🖥️ **Mac Address:** `{mac}`\n"
                 f"🌐 السيرفر: {clean_host}\n"
-                f"📶 حالة الخدمة: **{s_status}**\n"
-                f"🖥️ الماك: `{mac}`\n"
-                f"👥 المتصلون: `{active}`\n"
+                f"📶 حالة السيرفر: **{s_status}**\n"
+                f"👥 المتصلون حالياً: `{active}`\n"
                 f"📊 الاستقرار: **{stab}**\n\n"
-                f"📺 **القنوات المطلوبة:**\n" + "\n".join(channels)
+                f"📺 **القنوات المفضلة:**\n" + "\n".join(channels)
             )
             
             bot.send_message(ID, report, parse_mode="Markdown")
-            st.success(f"🎯 تم الفحص! حالة السيرفر: {s_status}")
-
+            st.success(f"🎯 تم إرسال التقرير! حالة السيرفر: {s_status}")
+            
+            # الرادار التلقائي في الخلفية
             if success and active != "0":
-                st.info("🔄 الرادار سيبقى يعمل لتنبيهك فور خلو الماك...")
+                st.warning("🔄 الماك مشغول.. الرادار يراقب الآن وسينبهك فور خلوه.")
                 placeholder = st.empty()
                 while True:
-                    s_status, active, stab, _ = perform_full_check()
-                    placeholder.write(f"⏱️ تحديث: {time.strftime('%H:%M:%S')} | الحالة: {s_status} | المتصلون: {active}")
-                    if active == "0" and s_status.startswith("✅"):
-                        bot.send_message(ID, f"🔔 **تنبيه: الماك أصبح متاحاً الآن!**\nالسيرفر: {clean_host}\nالماك: `{mac}`\nالاستقرار: {stab}")
+                    curr_status, curr_active, curr_stab, _ = perform_full_check()
+                    placeholder.write(f"⏱️ تحديث الرادار: {time.strftime('%H:%M:%S')} | المتصلون: {curr_active}")
+                    if curr_active == "0" and "✅" in curr_status:
+                        bot.send_message(ID, f"🔔 **تنبيه: الماك أصبح متاحاً الآن!**\n🖥️ الماك: `{mac}`\n📶 السيرفر: {clean_host}\n📊 الجودة: {curr_stab}")
                         break
-                    time.sleep(300)
+                    time.sleep(300) # فحص كل 5 دقائق
         else:
-            st.error("تأكد من الرابط والماك")
+            st.error("يرجى التأكد من إدخال الرابط والماك بشكل صحيح.")
